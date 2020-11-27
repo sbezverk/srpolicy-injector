@@ -40,11 +40,19 @@ func AddSRPolicy(client api.GobgpApiClient) error {
 	rt, _ := ptypes.MarshalAny(&api.ExtendedCommunitiesAttribute{
 		Communities: []*any.Any{rtm},
 	})
-	sid := make([]byte, 4)
-	binary.BigEndian.PutUint32(sid, 24321)
-	bsid, err := ptypes.MarshalAny(&api.SRBindingSID{
-		Flags: 0,
-		Sid:   sid,
+	// Tunnel Encapsulation Type 15 (SR Policy) sub tlvs
+	s := make([]byte, 4)
+	binary.BigEndian.PutUint32(s, 24321)
+	sid, err := ptypes.MarshalAny(&api.SRBindingSID{
+		SFlag: true,
+		IFlag: false,
+		Sid:   s,
+	})
+	if err != nil {
+		return err
+	}
+	bsid, err := ptypes.MarshalAny(&api.TunnelEncapSubTLVSRBindingSID{
+		Bsid: sid,
 	})
 	if err != nil {
 		return err
@@ -58,27 +66,31 @@ func AddSRPolicy(client api.GobgpApiClient) error {
 	if err != nil {
 		return err
 	}
-	tunTlvs, err := ptypes.MarshalAny(&api.TunnelEncapSubTLVSRPolicy{
-		Bsid:              bsid,
+	seglist, err := ptypes.MarshalAny(&api.TunnelEncapSubTLVSRSegmentList{
+		Weight: &api.SRWeight{
+			Flags:  0,
+			Weight: 12,
+		},
+		Segments: []*any.Any{segment},
+	})
+	if err != nil {
+		return err
+	}
+	pref, err := ptypes.MarshalAny(&api.TunnelEncapSubTLVSRPreference{
+		Flags:      0,
+		Preference: 11,
+	})
+	if err != nil {
+		return err
+	}
+	cpn, err := ptypes.MarshalAny(&api.TunnelEncapSubTLVSRCandidatePathName{
 		CandidatePathName: "CandidatePathName",
-		Priority:          10,
-		Enlp: &api.TunnelEncapSubTLVSRENLP{
-			Flags: 0,
-			Enlp:  api.ENLPType_Type4,
-		},
-		Preference: &api.TunnelEncapSubTLVSRPreference{
-			Flags:      0,
-			Preference: 11,
-		},
-		SegmentList: []*api.SegmentList{
-			{
-				Weight: &api.SRWeight{
-					Flags:  0,
-					Weight: 12,
-				},
-				Segments: []*any.Any{segment},
-			},
-		},
+	})
+	if err != nil {
+		return err
+	}
+	pri, err := ptypes.MarshalAny(&api.TunnelEncapSubTLVSRPriority{
+		Priority: 10,
 	})
 	if err != nil {
 		return err
@@ -88,7 +100,7 @@ func AddSRPolicy(client api.GobgpApiClient) error {
 		Tlvs: []*api.TunnelEncapTLV{
 			{
 				Type: 15,
-				Tlvs: []*anypb.Any{tunTlvs},
+				Tlvs: []*anypb.Any{bsid, seglist, pref, cpn, pri},
 			},
 		},
 	})
